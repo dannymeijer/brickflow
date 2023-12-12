@@ -1,7 +1,8 @@
 import os
 import shutil
 import traceback
-from unittest.mock import patch, Mock
+from unittest.mock import MagicMock, patch, Mock
+import pytest
 
 import click
 from click.testing import CliRunner
@@ -15,6 +16,8 @@ from brickflow.cli.bundles import (
     bundle_download_path,
     download_and_unzip_databricks_cli,
     get_force_lock_flag,
+    bundle_deploy,
+    bundle_destroy,
 )
 from brickflow.cli.projects import handle_libraries
 
@@ -85,3 +88,34 @@ class TestCli:
         handle_libraries(skip_libraries=False)
         assert bpd.brickflow_auto_add_libraries is True
         bpd.brickflow_auto_add_libraries = None
+
+    @pytest.mark.parametrize(
+        "function, command, workflows_dir",
+        [
+            (bundle_deploy, "deploy", "/path/to/deploy/workflows"),
+            (bundle_destroy, "destroy", "/path/to/destroy/workflows"),
+        ],
+    )
+    def test_bundle_commands(self, function, command, workflows_dir, mocker):
+        # Mock the helper functions
+        mock_get_bundles_project_env = mocker.patch(
+            "brickflow.cli.bundles.get_bundles_project_env", return_value="test_env"
+        )
+        mock_get_force_lock_flag = mocker.patch(
+            "brickflow.cli.bundles.get_force_lock_flag", return_value="--force-lock"
+        )
+        mock_exec_command: MagicMock = mocker.patch(
+            "brickflow.cli.bundles.exec_command"
+        )
+
+        # Call the function under test
+        function(force_acquire_lock=True, workflows_dir=workflows_dir)
+
+        # Assert that the helper functions were called with the expected arguments
+        mock_get_bundles_project_env.assert_called_once()
+        mock_get_force_lock_flag.assert_called_once()
+
+        # Assert that exec_command was called with the expected arguments
+        mock_exec_command.assert_any_call(
+            "test_bundle_cli", "bundle", [command, "-e", "test_env", "--force-lock"]
+        )
